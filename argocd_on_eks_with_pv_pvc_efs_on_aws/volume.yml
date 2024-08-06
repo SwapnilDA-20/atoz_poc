@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: argocd-pv-volume
+  namespace: argocd
+spec:
+  capacity:
+    storage: 10Gi  # Adjust the size as needed
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: argocd-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: fs-0c9e89bd602ca1148::fsap-0063de8c290e4dfd6  # Replace with your EFS File System ID
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argocd-pvc
+  namespace: argocd
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi  # This should match the size in the PV
+  storageClassName: argocd-sc
+

@@ -1,0 +1,213 @@
+
+
+Ok so here are your tasks:
+
+1. Create an RDS MySQL instance
+2. Create EKS cluster and deploy wordpress in it.
+3. Wordpress internally uses a volume to store data and it also needs an external database like MySQL. Since RDS u will have created. U need to learn about volume in k8s. Create storage classes for EBS Volumes.
+4. Use ALB ingress to expose the wordpress application 
+
+
+steps:
+0.create vpc with pub and pvt subnet
+1.create EKS cluster
+2.create nodegroup (try to give adminrole)
+3.create mysql on RDS (record username/endpoint/pass)
+3.1. create bastion host to access rds with sg settings
+
+4.enable service account + iam provider  (use helm)(https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html) 
+5.create custome role (for access to service account)
+6.create i am policy and service account
+7.deploy alb ingress controller
+8.deploy application and ingress 
+before that create ACM in same region and use ARN in ingress
+like shown in above ingress.yml
+9.on R53 create custom domain with A record and CNAME record 
+change the aws ns records in ur hosting domain website
+10. try to access custom domain 
+
+create VPC 10.0.0.0/16
+create 4 subnet group 2 public and 2 private
+create igw, RT, NAT
+
+1. Create an RDS MySQL instance in AWS RDS in private subnet with 2 AZ
+
+create user and pass
+create wordpress db in it
+in sg open 3306 
+
+create bastion host to access RDS mysql and check connectivity
+
+2. Create EKS cluster and deploy wordpress in it
+
+create cluster hadiya-cluster with subnet selected
+create node group with 2 nodes in public subnet
+
+access bastion host
+install
+eksctl and kubectl 
+
+aws eks update-kubeconfig --region ap-south-1 --name hadiya-cluster
+
+now access cluster
+
+and create secrets, pv,pvc, deployment, service
+
+3. Wordpress internally uses a volume to store data and it also needs an external database like MySQL. Since RDS u will have created. U need to learn about volume in k8s. Create storage classes for EBS Volumes.
+
+
+secret.yml
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+type: Opaque
+data:
+  mysql-user: YWRtaW4=
+  mysql-password: d29yZHByZXNzMTIz
+  mysql-database: d29yZHByZXNz
+  mysql-host: aGFkaXlhLXdvcmRwcmVzcy1kYi5jam8yZ3ltb2Fxb20uYXAtc291dGgtMS5yZHMuYW1hem9uYXdzLmNvbQ==
+
+pv and pvc.yml
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: wordpress-pv
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: "/mnt/data"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wordpress-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: manual
+
+deployment.yml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+      - name: wordpress
+        image: wordpress:latest
+        env:
+        - name: WORDPRESS_DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-host
+        - name: WORDPRESS_DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-user
+        - name: WORDPRESS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-password
+        - name: WORDPRESS_DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-database
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /var/www/html
+          name: wordpress-storage
+      volumes:
+      - name: wordpress-storage
+        persistentVolumeClaim:
+          claimName: wordpress-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+
+4. Use ALB ingress to expose the wordpress application 
+
+ingress.yml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wordpress-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/load-balancer-name: wordpress-test-eks-int-alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/subnets: subnet-044df0a600cc5c116,subnet-06d3eed6bf981e2c4
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:637423272434:certificate/bbaee81c-f102-4137-a1b5-07b458075c9e
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
+    alb.ingress.kubernetes.io/group.name: 'int'
+spec: 
+  rules: 
+    - host: wordpress.swapnilahirekar.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wordpress
+                port:
+                  number: 80
+
+
+https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html
+https://docs.aws.amazon.com/eks/latest/userguide/alb-ingress.html
+	https://docs.aws.amazon.com/eks/latest/userguide/lbc-manifest.html
+
+
+Ingress Basics 	
+
+lets say we have 4 pods and want traffic to comes to that pods we use clusterip for internal traffic and
+nodeport for external traffic and then map customedomain to loadbalancer using route53 then traffic routed to multiple pods
+ 
+service is nodeport traffic to nodeport routed trough ingress controller 
+annotation listen by aws ingress controller
+class : alp
+schemen : internetfacing
+target type: instance  or ipmode(for farget type)
+
+host: is traffic is comming from
+service: we want to go traffic to this service > goes to service we define in manifist and check the appname

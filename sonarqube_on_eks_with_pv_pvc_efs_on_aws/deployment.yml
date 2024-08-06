@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sonarqube
+  namespace: sonarqube
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sonarqube
+  template:
+    metadata:
+      labels:
+        app: sonarqube
+    spec:
+      containers:
+      - name: sonar
+        image: sonarqube:latest
+        resources:
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+            requests:
+              memory: "500Mi"
+              cpu: "500m"
+        env:
+        - name: SONAR_DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: postgresql-host
+        - name: SONAR_DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: postgresql-user
+        - name: SONAR_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: postgresql-password
+        - name: SONAR_DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: postgresql-database
+        ports:
+        - containerPort: 9000
+        volumeMounts:
+            - name: sonar-data
+              mountPath: /opt/sonarqube/data     #path inside container where efs will be mounted    
+      volumes:
+        - name: sonar-data
+          persistentVolumeClaim:
+              claimName: sonar-pvc  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarqube
+  namespace: sonarqube
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 9000
+  selector:
+    app: sonarqube
+

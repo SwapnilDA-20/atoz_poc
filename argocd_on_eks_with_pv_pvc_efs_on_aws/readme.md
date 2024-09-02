@@ -10,7 +10,19 @@ in volumemounts section add below line mountpath and name
             type: RuntimeDefault
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
-        volumeMounts:
+  **      volumeMounts:
         - mountPath: /argocd
-          name: argocd-data
+          name: argocd-data**
 
+
+          dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: argocd-server
+      serviceAccountName: argocd-server
+      terminationGracePeriodSeconds: 30
+  **    volumes:
+      - name: argocd-data
+        persistentVolumeClaim:
+          claimName: argocd-pvc**
